@@ -1,0 +1,25 @@
+# Day 1 - Linux User Management
+
+## Task
+Create a user with a non-interactive login shell on a remote application server.
+
+## Concepts Learned
+- SSH
+- Jump Host
+- Application Servers
+- useradd
+- /usr/sbin/nologin
+- sudo
+
+## Commands Used
+
+ssh tony@stapp01
+sudo su -
+useradd -s /usr/sbin/nologin john
+
+## What I Learned
+
+- A Jump Host acts as a gateway to remote servers.
+- Every server has its own users and filesystem.
+- SSH connects to a remote machine securely.
+- Non-interactive users are useful for service accounts.
