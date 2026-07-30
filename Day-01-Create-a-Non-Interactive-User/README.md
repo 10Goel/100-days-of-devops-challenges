@@ -1,4 +1,4 @@
-# Day 1 - Linux User Management
+# Day 01 - Create a Non-Interactive User
 
 ## 🎯 Objective
 
