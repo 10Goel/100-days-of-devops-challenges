@@ -66,7 +66,7 @@ sudo su -
 ## Edit SSH configuration
 
 ```bash
-vi /etc/ssh/sshd_config
+nano /etc/ssh/sshd_config
 ```
 
 Update:
