@@ -20,14 +20,6 @@ Cron is one of the most important Linux utilities used by System Administrators,
 
 ---
 
-## 📂 Files Included
-
-- README.md
-- Commands.md
-- Notes.md
-
----
-
 ## 🎯 Skills Learned
 
 - Linux Automation
