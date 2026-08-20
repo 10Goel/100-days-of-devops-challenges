@@ -5,7 +5,7 @@ This document contains the commands used during the Day 20 Nginx + PHP-FPM confi
 ## 1. Log In and Verify Host
 
 ```bash
-ssh tony@stapp02
+ssh steve@stapp02
 ```
 
 ```bash
