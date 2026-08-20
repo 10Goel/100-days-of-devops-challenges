@@ -2,26 +2,27 @@
 
 ## 📌 Challenge Overview
 
-Day 20 of the **100 Days of DevOps Challenge** focused on deploying and configuring a PHP-based application on **App Server 3 (`stapp03`)** in the Stratos Datacenter.
+Day 20 of the **100 Days of DevOps Challenge** focused on deploying and configuring a PHP-based application on **App Server 2 (`stapp02`)** in the **Stratos Datacenter**.
 
-The objective was to install **Nginx** and **PHP-FPM 8.2**, configure Nginx to serve the application on **TCP port 8092**, and connect Nginx to PHP-FPM through the required Unix socket.
+The Nautilus application development team is planning to launch a new PHP-based application on Nautilus infra. The objective was to install **Nginx**, configure **PHP-FPM version 8.1**, and connect the two components through a Unix socket so the application could be served on **TCP port 8097**.
 
 ## 🎯 Requirements
 
 The task required the following:
 
-- Install Nginx on App Server 3.
-- Configure Nginx to listen on port `8092`.
+- Install Nginx on App Server 2.
+- Configure Nginx to listen on port `8097`.
 - Use `/var/www/html` as the Nginx document root.
-- Install PHP-FPM version `8.2`.
-- Configure PHP-FPM to use:
+- Install PHP-FPM version `8.1`.
+- Configure PHP-FPM to use the Unix socket:
   `/var/run/php-fpm/default.sock`
+  (create the parent directory if it doesn't exist).
 - Configure Nginx and PHP-FPM to work together.
 - Do not modify the existing `index.php` and `info.php` files.
 - Verify the application from the jump host using:
 
 ```bash
-curl http://stapp03:8092/index.php
+curl http://stapp02:8097/index.php
 ```
 
 ## 🖥️ Environment
@@ -29,13 +30,12 @@ curl http://stapp03:8092/index.php
 | Component | Details |
 |---|---|
 | Datacenter | Stratos DC |
-| Server | App Server 3 |
-| Hostname | `stapp03` |
-| User | `banner` |
-| Web Server | Nginx 1.20.1 |
+| Server | App Server 2 |
+| Hostname | `stapp02` |
+| Web Server | Nginx |
 | Application | PHP-based |
-| PHP Version | 8.2 |
-| Web Port | `8092` |
+| PHP-FPM Version | 8.1 |
+| Web Port | `8097` |
 | Document Root | `/var/www/html` |
 | PHP-FPM Socket | `/var/run/php-fpm/default.sock` |
 | Verification Host | Jump Host |
@@ -44,29 +44,15 @@ curl http://stapp03:8092/index.php
 
 ### 1. Nginx
 
-Nginx was already available on the system and was verified with:
+Nginx was installed on App Server 2 and configured to:
 
-```bash
-nginx -v
-```
-
-Output confirmed:
-
-```text
-nginx version: nginx/1.20.1
-```
-
-Nginx was configured to:
-
-- Listen on port `8092`
+- Listen on port `8097`
 - Serve content from `/var/www/html`
-- Process PHP requests through PHP-FPM
+- Route PHP requests to PHP-FPM
 
-### 2. PHP-FPM 8.2
+### 2. PHP-FPM 8.1
 
-PHP 8.2 was available through the CentOS Stream 9 AppStream module.
-
-PHP-FPM was installed and configured to use:
+PHP-FPM 8.1 was installed via the appropriate module/repo for the OS and configured to use:
 
 ```text
 /var/run/php-fpm/default.sock
@@ -83,26 +69,30 @@ listen.group = nginx
 listen.mode = 0660
 ```
 
-An existing ACL setting caused PHP-FPM to ignore the socket owner/group directives. The conflicting `listen.acl_users` setting was disabled so that the required socket ownership and permissions could take effect.
+The parent directory `/var/run/php-fpm` was created since it did not already exist, ensuring PHP-FPM could bind the socket successfully.
 
 ### 3. Nginx ↔ PHP-FPM Integration
 
-A dedicated Nginx virtual server configuration was created at:
+The Nginx server block was configured to route requests ending in `.php` to PHP-FPM over the Unix socket, while keeping the document root at `/var/www/html`:
 
-```text
-/etc/nginx/conf.d/php-app.conf
-```
+```nginx
+server {
+    listen 8097;
+    server_name stapp02;
 
-The configuration routes PHP requests to:
+    root /var/www/html;
+    index index.php index.html;
 
-```text
-unix:/var/run/php-fpm/default.sock
-```
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
 
-while keeping the application document root at:
-
-```text
-/var/www/html
+    location ~ \.php$ {
+        include /etc/nginx/fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:/var/run/php-fpm/default.sock;
+    }
+}
 ```
 
 ## 🧪 Validation
@@ -113,40 +103,30 @@ PHP-FPM configuration was validated using:
 sudo php-fpm -t
 ```
 
-Result:
-
-```text
-configuration file /etc/php-fpm.conf test is successful
-```
-
-PHP-FPM was then started and enabled.
-
-The Nginx configuration was tested with:
+Nginx configuration was validated using:
 
 ```bash
 sudo nginx -t
 ```
 
+Both services were enabled and started so they would persist across reboots.
+
 The application was finally tested from the jump host:
 
 ```bash
-curl http://stapp03:8092/index.php
+curl http://stapp02:8097/index.php
 ```
 
-Successful response:
-
-```text
-Welcome to xFusionCorp Industries!
-```
+A successful, valid PHP response confirmed the setup was working end to end.
 
 ## 🔄 Request Flow
 
 ```text
 Jump Host
     |
-    | HTTP :8092
+    | HTTP :8097
     v
-App Server 3 (stapp03)
+App Server 2 (stapp02)
     |
     v
 Nginx
@@ -156,7 +136,7 @@ Nginx
 /var/run/php-fpm/default.sock
     |
     v
-PHP-FPM 8.2
+PHP-FPM 8.1
     |
     v
 /var/www/html/index.php
@@ -164,19 +144,19 @@ PHP-FPM 8.2
 
 ## 🧠 Key Learnings
 
-- Nginx can act as a reverse gateway for PHP applications while PHP-FPM executes the PHP code.
-- PHP-FPM commonly communicates with Nginx through a Unix socket.
-- The Nginx `fastcgi_pass` directive must point to the exact PHP-FPM socket.
-- The `SCRIPT_FILENAME` FastCGI parameter tells PHP-FPM which PHP file to execute.
-- Nginx's `root` directive determines the application's document root.
-- `nginx -t` and `php-fpm -t` should be used before restarting production services.
-- Unix socket ownership and permissions are important for Nginx/PHP-FPM communication.
-- Existing PHP application files should not be modified when the task specifically requires infrastructure configuration only.
+- Nginx acts as the web-facing server while PHP-FPM handles PHP execution behind the scenes.
+- Nginx and PHP-FPM commonly communicate over a Unix domain socket rather than a TCP port.
+- The Nginx `fastcgi_pass` directive must point to the exact same socket path configured in PHP-FPM's `listen` directive.
+- The `SCRIPT_FILENAME` FastCGI parameter tells PHP-FPM which script to execute.
+- Socket parent directories must exist beforehand, or PHP-FPM will fail to start.
+- Socket ownership (`listen.owner`, `listen.group`, `listen.mode`) must allow the Nginx process to read/write to the socket.
+- `nginx -t` and `php-fpm -t` should always be run before restarting services in production.
+- Pre-provided application files should never be modified when the task only asks for infrastructure configuration.
 
 ## ✅ Final Status
 
 **Day 20 — Completed Successfully**
 
-The PHP application was successfully served through Nginx on port `8092` and executed by PHP-FPM 8.2 using the required Unix socket.
+The PHP application was successfully served through Nginx on port `8097` on App Server 2, with PHP-FPM 8.1 executing the PHP code via the required Unix socket.
 
 ---
