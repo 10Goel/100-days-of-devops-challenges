@@ -1,8 +1,12 @@
 # Day 20 — Commands Reference
 
-This document contains the commands used during the Day 20 Nginx + PHP-FPM configuration task.
+This document contains the commands used during the Day 20 Nginx + PHP-FPM configuration task on App Server 2.
 
-## 1. Verify Host
+## 1. Log In and Verify Host
+
+```bash
+ssh tony@stapp02
+```
 
 ```bash
 hostname
@@ -12,71 +16,70 @@ hostname
 cat /etc/os-release
 ```
 
-## 2. Verify Nginx
+## 2. Install Nginx
 
 ```bash
-nginx -v
-```
-
-Expected:
-
-```text
-nginx version: nginx/1.20.1
-```
-
-## 3. Check PHP Modules
-
-```bash
-sudo dnf module list php
-```
-
-## 4. Enable PHP 8.2
-
-```bash
-sudo dnf module reset php -y
-sudo dnf module enable php:8.2 -y
-```
-
-## 5. Install PHP-FPM
-
-```bash
-sudo dnf install -y php-fpm php-cli
+sudo yum install nginx -y
 ```
 
 Verify:
 
 ```bash
-php -v
+nginx -v
 ```
 
-## 6. Verify Application Files
+## 3. Enable PHP 8.1 Module Stream
+
+```bash
+sudo yum install epel-release -y
+
+# Add the Remi repo for PHP versions not in the base AppStream repo
+sudo yum install https://rpms.remirepo.net/enterprise/remi-release-9.rpm -y
+
+sudo dnf module reset php -y
+sudo dnf module enable php:remi-8.1 -y
+```
+
+## 4. Install PHP-FPM 8.1
+
+```bash
+sudo yum install php-fpm -y
+```
+
+Verify version:
+
+```bash
+php-fpm -v
+```
+
+## 5. Verify Application Files
 
 ```bash
 ls -l /var/www/html/
 ```
 
-The task-provided files were:
+Expected task-provided files:
 
 ```text
 index.php
 info.php
 ```
 
-These files were not modified.
+These files were **not modified**.
 
-## 7. Create PHP-FPM Socket Directory
+## 6. Create PHP-FPM Socket Parent Directory
 
 ```bash
 sudo mkdir -p /var/run/php-fpm
 ```
 
-## 8. Backup PHP-FPM Configuration
+## 7. Backup PHP-FPM Configuration
 
 ```bash
 sudo cp /etc/php-fpm.d/www.conf /etc/php-fpm.d/www.conf.bak
 ```
 
-## 9. Configure PHP-FPM with sed
+## 8. Configure PHP-FPM with sed
 
 Set the PHP-FPM process user:
 
@@ -110,29 +113,27 @@ sudo sed -i 's|^[;#]*listen.group[[:space:]]*=.*|listen.group = nginx|' /etc/php
 sudo sed -i 's|^[;#]*listen.mode[[:space:]]*=.*|listen.mode = 0660|' /etc/php-fpm.d/www.conf
 ```
 
-## 10. Disable Conflicting PHP-FPM ACL
+## 9. Check for Conflicting ACL Settings (if present)
 
-The configuration contained:
+If the config contains:
 
 ```text
 listen.acl_users = apache,nginx
 ```
 
-This caused PHP-FPM to ignore `listen.owner` and `listen.group`.
-
-It was disabled with:
+it overrides `listen.owner`/`listen.group`. Disable it with:
 
 ```bash
 sudo sed -i 's|^listen\.acl_users|;listen.acl_users|' /etc/php-fpm.d/www.conf
 ```
 
-## 11. Verify PHP-FPM Settings
+## 10. Verify PHP-FPM Settings
 
 ```bash
 grep -E '^(user|group|listen|listen.owner|listen.group|listen.mode)' /etc/php-fpm.d/www.conf
 ```
 
-## 12. Test PHP-FPM Configuration
+## 11. Test PHP-FPM Configuration
 
 ```bash
 sudo php-fpm -t
@@ -144,19 +145,19 @@ Expected:
 configuration file /etc/php-fpm.conf test is successful
 ```
 
-## 13. Start and Enable PHP-FPM
+## 12. Start and Enable PHP-FPM
 
 ```bash
 sudo systemctl enable --now php-fpm
 ```
 
-Check:
+Check status:
 
 ```bash
 sudo systemctl status php-fpm --no-pager
 ```
 
-## 14. Verify PHP-FPM Socket
+## 13. Verify PHP-FPM Socket
 
 ```bash
 sudo ls -l /var/run/php-fpm/default.sock
@@ -174,13 +175,13 @@ If `ss` is unavailable:
 sudo dnf install -y iproute
 ```
 
-## 15. Create Nginx Application Configuration
+## 14. Create Nginx Application Configuration
 
 ```bash
 sudo tee /etc/nginx/conf.d/php-app.conf > /dev/null <<'EOF'
 server {
-    listen 8092;
-    server_name stapp03;
+    listen 8097;
+    server_name stapp02;
 
     root /var/www/html;
     index index.php index.html;
@@ -198,13 +199,13 @@ server {
 EOF
 ```
 
-## 16. Review Nginx Configuration
+## 15. Review Nginx Configuration
 
 ```bash
 cat /etc/nginx/conf.d/php-app.conf
 ```
 
-## 17. Test Nginx Configuration
+## 16. Test Nginx Configuration
 
 ```bash
 sudo nginx -t
@@ -217,45 +218,73 @@ syntax is ok
 test is successful
 ```
 
-## 18. Start and Enable Nginx
+## 17. Start and Enable Nginx
 
 ```bash
 sudo systemctl enable --now nginx
 ```
 
-Check:
+Check status:
 
 ```bash
 sudo systemctl status nginx --no-pager
 ```
 
-## 19. Verify Nginx Port
+## 18. Verify Nginx Port
 
 ```bash
-sudo ss -lntp | grep 8092
+sudo ss -lntp | grep 8097
 ```
 
-## 20. Test PHP Locally
+## 19. Fix Ownership/Permissions (if needed)
 
 ```bash
-curl http://localhost:8092/index.php
+sudo chown -R nginx:nginx /var/www/html
+```
+
+## 20. Check SELinux and Firewall (if applicable)
+
+```bash
+getenforce
+```
+
+If `Enforcing`:
+
+```bash
+sudo setsebool -P httpd_can_network_connect 1
+sudo chcon -R -t httpd_sys_content_t /var/www/html
+sudo chcon -t httpd_sys_rw_content_t /var/run/php-fpm/default.sock
+```
+
+Check firewall:
+
+```bash
+sudo firewall-cmd --list-ports
+sudo firewall-cmd --permanent --add-port=8097/tcp
+sudo firewall-cmd --reload
+```
+
+## 21. Test PHP Locally
+
+```bash
+curl http://localhost:8097/index.php
 ```
 
 Test the second application file:
 
 ```bash
-curl http://localhost:8092/info.php
+curl http://localhost:8097/info.php
 ```
 
-## 21. Test Using Server Hostname
+## 22. Test Using Server Hostname
 
 ```bash
-curl http://stapp03:8092/index.php
+curl http://stapp02:8097/index.php
 ```
 
-## 22. Final Verification from Jump Host
+## 23. Final Verification from Jump Host
 
-Exit App Server 3:
+Exit App Server 2:
 
 ```bash
 exit
@@ -264,13 +293,7 @@ exit
 From the jump host:
 
 ```bash
-curl http://stapp03:8092/index.php
-```
-
-Successful result:
-
-```text
-Welcome to xFusionCorp Industries!
+curl http://stapp02:8097/index.php
 ```
 
 ## 🔑 Most Important Commands
@@ -290,5 +313,5 @@ sudo nginx -t
 ### Final application test
 
 ```bash
-curl http://stapp03:8092/index.php
+curl http://stapp02:8097/index.php
 ```
