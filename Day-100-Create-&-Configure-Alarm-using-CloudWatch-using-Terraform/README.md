@@ -39,6 +39,20 @@ datacenter-sns-topic]
 
 **Key architectural distinction:** the `data.aws_sns_topic.datacenter` data source **looks up** the existing topic; Terraform does not create or manage it. The EC2 instance ID is referenced in alarm dimensions so this alarm monitors one instance, not an aggregate across instances.
 
+## Repository structure
+
+```text
+Day-100-Terraform-EC2-CloudWatch-SNS/
+├── README.md      # Challenge, architecture, validation, lessons
+├── Commands.md    # Commands and checks (copy/paste friendly)
+├── Notes.md       # Deep notes and interview preparation
+├── main.tf        # EC2, SNS data lookup, CloudWatch alarm
+├── outputs.tf     # Exact KodeKloud output names
+└── .gitignore     # Exclude state, secrets, generated files
+```
+
+`provider.tf` belongs to your target environment and is deliberately **not bundled**: retain the provided AWS provider settings in KodeKloud. The sample `main.tf` uses a Canonical Ubuntu 22.04 LTS AMI data lookup; this works where the AWS provider has permission to describe AMIs and the images are available. If the lab's AWS emulator does not support the lookup, replace the `ami` expression with an **Ubuntu AMI confirmed available in that same environment**.
+
 ## Terraform configuration highlights
 
 ```hcl
@@ -74,6 +88,8 @@ resource "aws_cloudwatch_metric_alarm" "datacenter_alarm" {
 4. Review `terraform plan` for **only** the intended changes, then run `terraform apply`.
 5. Inspect the output names and the CloudWatch alarm's `InstanceId`, statistic, threshold, period, and SNS action.
 6. Run `terraform plan` again and submit only when the output is **No changes. Your infrastructure matches the configuration.**
+
+See [Commands.md](Commands.md) for exact commands and [Notes.md](Notes.md) for concepts and troubleshooting.
 
 ## Validation evidence and completion
 
